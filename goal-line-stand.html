@@ -1,0 +1,653 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>GOAL LINE STAND</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Oswald:wght@500;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --turf-a:#1f7a3d;
+    --turf-b:#1b6e36;
+    --ez:#b3331f;
+    --line:#f4f7f4;
+    --led:#ffb000;
+    --led-dim:#5a3d00;
+    --steel:#11161d;
+    --steel-2:#1b232e;
+    --chalk:#e9efe9;
+    --hot:#9cff3b;
+    --danger:#ff3b3b;
+    --off:#2f6df0;
+    --def:#d8202a;
+    --qb:#f2c200;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:
+      radial-gradient(120% 80% at 50% -10%, #243140 0%, #0c1117 55%, #070a0e 100%);
+    color:var(--chalk);font-family:'Oswald',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:640px;margin:0 auto;padding:14px 14px 28px;}
+  .titlebar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+  .title{font-family:'Press Start 2P',monospace;font-size:14px;line-height:1.5;letter-spacing:1px;
+    color:var(--led);text-shadow:0 0 10px rgba(255,176,0,.45),0 2px 0 #6b4a00;}
+  .title small{display:block;color:#8fb0c9;font-family:'Oswald';font-size:12px;letter-spacing:3px;
+    text-shadow:none;margin-top:6px;font-weight:700;}
+  .mute{font-family:'Press Start 2P',monospace;font-size:10px;background:var(--steel-2);color:var(--led);
+    border:2px solid #2c3a49;border-radius:8px;padding:8px 9px;cursor:pointer;line-height:1;}
+  .mute:active{transform:translateY(1px)}
+
+  /* scoreboard */
+  .board{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;background:linear-gradient(#0e1319,#070a0e);
+    border:2px solid #2c3a49;border-radius:12px;padding:12px 10px;margin-bottom:10px;
+    box-shadow:inset 0 0 0 2px #000, inset 0 6px 22px rgba(0,0,0,.6);}
+  .cell{text-align:center}
+  .cell .k{font-family:'Oswald';font-weight:700;font-size:10px;letter-spacing:2px;color:#6f8aa0;text-transform:uppercase}
+  .cell .v{font-family:'Press Start 2P',monospace;font-size:18px;color:var(--led);margin-top:7px;
+    text-shadow:0 0 9px rgba(255,176,0,.5);}
+  .cell .v.small{font-size:12px;margin-top:9px}
+
+  .stage{position:relative;border-radius:12px;overflow:hidden;border:2px solid #2c3a49;
+    box-shadow:0 14px 34px rgba(0,0,0,.55), inset 0 0 0 2px #000;background:#0a0f0b;}
+  canvas{display:block;width:100%;height:auto;image-rendering:auto;touch-action:manipulation;}
+
+  .readout{display:flex;align-items:center;justify-content:center;gap:10px;min-height:30px;margin:12px 2px 4px;
+    font-weight:700;letter-spacing:2px;text-transform:uppercase;font-size:14px;color:#bcd0c4}
+  .readout b{color:var(--hot)}
+  .readout .warn{color:var(--danger)}
+
+  /* play call */
+  .calls{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+  .play{position:relative;display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;
+    background:linear-gradient(#1b232e,#141b23);border:2px solid #31404f;border-left-width:6px;
+    border-radius:10px;padding:11px 12px;cursor:pointer;color:var(--chalk);transition:transform .04s,border-color .12s,background .12s}
+  .play:hover{border-color:#4a5e72;background:#1f2935}
+  .play:active{transform:translateY(2px)}
+  .play .num{position:absolute;top:8px;right:10px;font-family:'Press Start 2P',monospace;font-size:9px;color:#5d7185}
+  .play .nm{font-family:'Press Start 2P',monospace;font-size:11px;letter-spacing:.5px}
+  .play .ds{font-weight:500;font-size:13px;color:#9fb6c6;letter-spacing:.5px}
+  .play.run{border-left-color:var(--qb)}
+  .play.te{border-left-color:#ff8a3c}
+  .play.wl{border-left-color:#39c0ff}
+  .play.wr{border-left-color:#b06bff}
+  .play .num{color:#5d7185}
+
+  .bigbtn{width:100%;margin-top:10px;font-family:'Press Start 2P',monospace;font-size:13px;letter-spacing:1px;
+    background:linear-gradient(#2f6df0,#234fb0);color:#fff;border:2px solid #6ea0ff;border-radius:10px;
+    padding:15px;cursor:pointer;text-shadow:0 2px 0 rgba(0,0,0,.3)}
+  .bigbtn:active{transform:translateY(2px)}
+  .hide{display:none !important}
+  .hint{margin-top:10px;text-align:center;font-size:12.5px;color:#7f96a8;letter-spacing:1px;line-height:1.6}
+  .hint kbd{font-family:'Press Start 2P',monospace;font-size:9px;background:#1b232e;border:1px solid #344656;
+    border-radius:5px;padding:4px 6px;color:var(--led)}
+  .credit{margin-top:14px;text-align:center;font-size:11px;color:#546574}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="titlebar">
+    <div class="title">GOAL LINE STAND<small>1ST &amp; GOAL · PUNCH IT IN</small></div>
+    <button id="mute" class="mute" aria-label="Toggle sound">SND ON</button>
+  </div>
+
+  <div class="board">
+    <div class="cell"><div class="k">Down</div><div id="bDown" class="v">1ST</div></div>
+    <div class="cell"><div class="k">Ball On</div><div id="bBall" class="v">1</div></div>
+    <div class="cell"><div class="k">Points</div><div id="bScore" class="v">0</div></div>
+    <div class="cell"><div class="k">Drives In</div><div id="bSeries" class="v">0</div></div>
+  </div>
+
+  <div class="stage">
+    <canvas id="game" width="760" height="680" aria-label="Goal line football field"></canvas>
+  </div>
+
+  <div id="readout" class="readout">Read the <b>RED</b> — that's where the D is loading up.</div>
+
+  <div id="calls" class="calls">
+    <button class="play run" data-play="RUN"><span class="num">1</span><span class="nm">DIVE</span><span class="ds">Hand to the RB up the gut</span></button>
+    <button class="play te"  data-play="TE"><span class="num">2</span><span class="nm">SEAM</span><span class="ds">Quick throw to the tight end</span></button>
+    <button class="play wl"  data-play="WR_L"><span class="num">3</span><span class="nm">FADE · L</span><span class="ds">Back-shoulder to the left WR</span></button>
+    <button class="play wr"  data-play="WR_R"><span class="num">4</span><span class="nm">FADE · R</span><span class="ds">Back-shoulder to the right WR</span></button>
+  </div>
+
+  <button id="snapHint" class="bigbtn hide">TAP / SPACE TO LOCK THE THROW</button>
+  <button id="replay" class="bigbtn hide" style="background:linear-gradient(#9cff3b,#5fb81f);border-color:#caff8f;color:#0c2406;">RUN IT BACK</button>
+
+  <div id="hint" class="hint">Pick a play with the buttons or <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd>. Then hit <kbd>SPACE</kbd> at the green to nail the timing.</div>
+  <div class="credit">a tiny goal-line cabinet · read • react • time</div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+// ---------- canvas ----------
+var cv = document.getElementById('game');
+var ctx = cv.getContext('2d');
+var W = cv.width, H = cv.height;
+
+// field geometry (top-down, offense attacks UP toward the end zone band)
+var GOAL_Y = 132;     // goal line
+var EZ_TOP = 14;      // top of playable end zone band
+var LOS_Y  = 196;     // line of scrimmage (the 1)
+var MID_X  = 380;
+
+// ---------- game state ----------
+var STATE = 'PRESNAP'; // PRESNAP, TIMING, RESOLVE, RESULT, GAMEOVER
+var down = 1;          // 1..4
+var score = 0;
+var series = 0;        // drives punched in
+var difficulty = 0;
+
+var defense = 'BOX';   // BOX, TE, WR_L, WR_R  (what the D commits to)
+var chosenPlay = null; // RUN, TE, WR_L, WR_R
+
+// timing meter
+var timingT = 0, timingDir = 1, timingSpeed = 1.4, lockT = 0.5, quality = 0;
+
+// resolve / animation
+var result = false;     // true = touchdown
+var animT = 0, animDur = 1.05;
+var ballFrom = null, ballTo = null;   // for passes
+var resultText = '', resultSub = '';
+var resultTimer = 0;
+
+// fx
+var confetti = [];
+var shake = 0;
+var flash = 0;          // white flash on score
+var pulse = 0;          // ambient pulse for tells
+
+// ---------- players ----------
+function P(id,label,x,y,team){ return {id:id,label:label,x:x,y:y,bx:x,by:y,team:team}; }
+var offense=[], defenders=[];
+
+function buildFormation(){
+  offense = [
+    P('LT','',270,205,'o'), P('LG','',322,205,'o'), P('C','',380,205,'o'),
+    P('RG','',438,205,'o'), P('RT','',490,205,'o'),
+    P('TE','TE',548,205,'o'),
+    P('QB','QB',380,250,'qb'),
+    P('RB','RB',380,295,'o'),
+    P('WL','WR',112,210,'o'),
+    P('WR','WR',648,210,'o')
+  ];
+  defenders = [
+    P('DL1','',330,168,'d'), P('DL2','',380,168,'d'), P('DL3','',430,168,'d'),
+    P('LB1','',345,140,'d'), P('LB2','',415,140,'d'),
+    P('CBL','CB',132,150,'d'), P('CBR','CB',628,150,'d'),
+    P('SE','S',548,138,'d'),
+    P('FS','S',380,72,'d')
+  ];
+}
+
+function resetSnapPositions(){
+  buildFormation();
+}
+
+// receiver chip lookup
+function chip(arr,id){ for(var i=0;i<arr.length;i++) if(arr[i].id===id) return arr[i]; return null; }
+
+// ---------- sound ----------
+var AC=null, muted=false;
+function audio(){ if(muted) return null; if(!AC){ try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ AC=null; } } if(AC&&AC.state==='suspended') AC.resume(); return AC; }
+function blip(freq,dur,type,vol,when){
+  var a=audio(); if(!a) return;
+  var t=a.currentTime+(when||0);
+  var o=a.createOscillator(), g=a.createGain();
+  o.type=type||'square'; o.frequency.setValueAtTime(freq,t);
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(vol||0.18,t+0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g).connect(a.destination); o.start(t); o.stop(t+dur+0.02);
+}
+function sweepDown(f1,f2,dur){
+  var a=audio(); if(!a) return; var t=a.currentTime;
+  var o=a.createOscillator(), g=a.createGain(); o.type='sawtooth';
+  o.frequency.setValueAtTime(f1,t); o.frequency.exponentialRampToValueAtTime(f2,t+dur);
+  g.gain.setValueAtTime(0.16,t); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g).connect(a.destination); o.start(t); o.stop(t+dur+0.02);
+}
+function crowd(dur){
+  var a=audio(); if(!a) return; var t=a.currentTime;
+  var n=a.sampleRate*dur, buf=a.createBuffer(1,n,a.sampleRate), d=buf.getChannelData(0);
+  for(var i=0;i<n;i++) d[i]=(Math.random()*2-1);
+  var src=a.createBufferSource(); src.buffer=buf;
+  var lp=a.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=900;
+  var g=a.createGain(); g.gain.setValueAtTime(0.0001,t);
+  g.gain.linearRampToValueAtTime(0.16,t+dur*0.4); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  src.connect(lp).connect(g).connect(a.destination); src.start(t); src.stop(t+dur);
+}
+function sndSnap(){ blip(180,0.07,'square',0.18); blip(140,0.09,'square',0.16,0.07); }
+function sndTD(){ blip(523,0.1,'square',0.2,0); blip(659,0.1,'square',0.2,0.1); blip(784,0.1,'square',0.2,0.2); blip(1047,0.22,'square',0.22,0.3); crowd(1.0); }
+function sndStuff(){ sweepDown(300,70,0.4); blip(90,0.18,'square',0.18,0.05); }
+function sndLock(){ blip(660,0.05,'square',0.14); }
+
+// ---------- DOM ----------
+var elDown=document.getElementById('bDown'), elBall=document.getElementById('bBall'),
+    elScore=document.getElementById('bScore'), elSeries=document.getElementById('bSeries'),
+    elReadout=document.getElementById('readout'), elCalls=document.getElementById('calls'),
+    elSnap=document.getElementById('snapHint'), elReplay=document.getElementById('replay'),
+    elMute=document.getElementById('mute'), elHint=document.getElementById('hint');
+
+var DOWN_NAMES={1:'1ST',2:'2ND',3:'3RD',4:'4TH'};
+function refreshBoard(){
+  elDown.textContent = DOWN_NAMES[down]||'-';
+  elBall.textContent = '1';
+  elScore.textContent = score;
+  elSeries.textContent = series;
+}
+
+function setReadout(html){ elReadout.innerHTML=html; }
+
+function showCalls(show){ elCalls.classList.toggle('hide',!show); }
+function showSnap(show,label){ elSnap.classList.toggle('hide',!show); if(label) elSnap.textContent=label; }
+function showReplay(show){ elReplay.classList.toggle('hide',!show); }
+
+// ---------- flow ----------
+function newSeries(){
+  down=1; difficulty=series; startDown();
+}
+function startDown(){
+  STATE='PRESNAP';
+  chosenPlay=null;
+  resetSnapPositions();
+  pickDefense();
+  applyTell();
+  refreshBoard();
+  showCalls(true); showSnap(false); showReplay(false);
+  setReadout('<b>'+(DOWN_NAMES[down])+' &amp; GOAL</b> — read where the D is stacked, then call it.');
+}
+function pickDefense(){
+  // slight bias toward stuffing the run at the goal line
+  var r=Math.random();
+  if(r<0.34) defense='BOX';
+  else if(r<0.56) defense='TE';
+  else if(r<0.78) defense='WR_L';
+  else defense='WR_R';
+}
+function applyTell(){
+  // creep the committed defenders toward their target so the player can read it
+  if(defense==='BOX'){
+    chip(defenders,'LB1').y=178; chip(defenders,'LB2').y=178;
+    chip(defenders,'LB1').x=362; chip(defenders,'LB2').x=398;
+  } else {
+    var id = defense==='TE' ? 'SE' : (defense==='WR_L'?'CBL':'CBR');
+    var rid= defense==='TE' ? 'TE' : (defense==='WR_L'?'WL':'WR');
+    var d=chip(defenders,id), o=chip(offense,rid);
+    d.y = o.y - 26; d.x = o.x + (o.x<MID_X?12:-12);
+  }
+}
+
+function selectPlay(p){
+  if(STATE!=='PRESNAP') return;
+  chosenPlay=p;
+  audio(); sndSnap();
+  STATE='TIMING';
+  timingT=0; timingDir=1;
+  timingSpeed = 1.35 + Math.min(difficulty,8)*0.11;
+  showCalls(false);
+  showSnap(true, p==='RUN' ? 'TAP / SPACE — HIT THE HOLE' : 'TAP / SPACE — RELEASE THE THROW');
+  setReadout('<b class="warn">SNAP!</b> stop the marker in the green.');
+}
+
+function lockTiming(){
+  if(STATE!=='TIMING') return;
+  lockT=timingT;
+  var dist=Math.abs(lockT-0.5)/0.5;      // 0 = perfect
+  quality=Math.max(0,1-dist);
+  sndLock();
+
+  var base=baseSuccess(chosenPlay,defense);
+  base -= Math.min(difficulty*0.035,0.30);
+  base = Math.max(0.12, Math.min(0.92, base));
+  var prob = base*(0.45+0.55*quality);
+  prob = Math.max(0.05, Math.min(0.96, prob));
+  result = Math.random() < prob;
+
+  buildAnimation();
+  STATE='RESOLVE'; animT=0;
+  showSnap(false);
+}
+
+function baseSuccess(play,def){
+  if(play==='RUN') return def==='BOX' ? 0.30 : 0.82;
+  // pass to a receiver
+  if(def===play) return 0.27;       // defense keyed this receiver
+  if(def==='BOX') return 0.86;      // loaded box, secondary light
+  var b=0.66;                       // keyed a different receiver
+  if(play==='TE') b+=0.05;          // TE = safest
+  return b;
+}
+
+function timingRating(){
+  if(quality>0.85) return 'PERFECT TIMING';
+  if(quality>0.6)  return 'GOOD TIMING';
+  if(quality>0.35) return 'A STEP OFF';
+  return lockT<0.5 ? 'TOO EARLY' : 'TOO LATE';
+}
+
+function buildAnimation(){
+  var carrierId = chosenPlay==='RUN' ? 'RB' : (chosenPlay==='TE'?'TE':(chosenPlay==='WR_L'?'WL':'WR'));
+  var carrier = chip(offense,carrierId);
+  carrier.fx=carrier.x; carrier.fy=carrier.y;
+
+  if(chosenPlay==='RUN'){
+    carrier.tx=MID_X; carrier.ty = result ? 60 : 158;
+    // box defenders converge
+    var cv1=chip(defenders,'DL2'), cv2=chip(defenders,'LB1'), cv3=chip(defenders,'LB2');
+    [cv1,cv2,cv3].forEach(function(d){ d.fx=d.x; d.fy=d.y; d.tx=MID_X+(Math.random()*40-20); d.ty=result?175:150; });
+    ballFrom=null; ballTo=null;
+  } else {
+    var spot={x:Math.max(60,Math.min(700,carrier.x)), y: result?72:84};
+    carrier.tx=spot.x; carrier.ty=spot.y;
+    var qb=chip(offense,'QB');
+    ballFrom={x:qb.x,y:qb.y}; ballTo={x:spot.x,y:spot.y};
+    // covering defender contests
+    var dId = chosenPlay==='TE'?'SE':(chosenPlay==='WR_L'?'CBL':'CBR');
+    var d=chip(defenders,dId); d.fx=d.x; d.fy=d.y;
+    d.tx=spot.x+(result?34:6); d.ty=spot.y+(result?22:2);
+  }
+}
+
+function lerp(a,b,t){ return a+(b-a)*t; }
+function easeOut(t){ return 1-Math.pow(1-t,2.4); }
+
+function tickResolve(dt){
+  animT += dt/animDur;
+  var t=Math.min(1,animT), e=easeOut(t);
+  // move animated chips
+  [].concat(offense,defenders).forEach(function(c){
+    if(c.tx!=null){ c.x=lerp(c.fx,c.tx,e); c.y=lerp(c.fy,c.ty,e); }
+  });
+  if(animT>=1){
+    enterResult();
+  }
+}
+
+function enterResult(){
+  STATE='RESULT'; resultTimer=1.25;
+  if(result){
+    resultText='TOUCHDOWN!'; resultSub=timingRating();
+    score+=7; series+=1;
+    flash=1; shake=10; spawnConfetti(); sndTD();
+    setReadout('<b>TOUCHDOWN!</b> '+resultSub.toLowerCase());
+  } else {
+    if(chosenPlay==='RUN' && defense==='BOX') resultText='STUFFED!';
+    else if(chosenPlay===defense) resultText='BROKEN UP!';
+    else resultText='NO GOOD!';
+    resultSub=timingRating();
+    shake=8; sndStuff();
+    setReadout('<b class="warn">'+resultText+'</b> '+resultSub.toLowerCase());
+  }
+  refreshBoard();
+}
+
+function afterResult(){
+  if(result){
+    newSeries();
+  } else {
+    down+=1;
+    if(down>4){ gameOver(); }
+    else { startDown(); }
+  }
+}
+
+function gameOver(){
+  STATE='GAMEOVER';
+  showCalls(false); showSnap(false); showReplay(true);
+  setReadout('<b class="warn">GOAL LINE STAND.</b> the D held — '+series+' drive'+(series===1?'':'s')+' punched in.');
+}
+
+function restart(){
+  score=0; series=0; difficulty=0; down=1;
+  confetti=[]; flash=0; shake=0;
+  newSeries();
+}
+
+// ---------- fx ----------
+function spawnConfetti(){
+  var cols=['#ffb000','#9cff3b','#39c0ff','#ff5d8f','#ffffff','#b06bff'];
+  for(var i=0;i<90;i++){
+    confetti.push({x:MID_X+(Math.random()*200-100),y:90+Math.random()*40,
+      vx:(Math.random()*2-1)*120, vy:-60-Math.random()*160,
+      g:240+Math.random()*120, c:cols[(Math.random()*cols.length)|0],
+      s:3+Math.random()*4, life:1.4+Math.random()*0.8, rot:Math.random()*6, vr:(Math.random()*2-1)*8});
+  }
+}
+function tickFx(dt){
+  pulse += dt;
+  if(shake>0) shake=Math.max(0,shake-dt*30);
+  if(flash>0) flash=Math.max(0,flash-dt*2.2);
+  for(var i=confetti.length-1;i>=0;i--){
+    var p=confetti[i]; p.life-=dt; if(p.life<=0){ confetti.splice(i,1); continue; }
+    p.vy+=p.g*dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.rot+=p.vr*dt;
+  }
+}
+
+// ---------- drawing ----------
+function drawField(){
+  // mowed stripes
+  var stripes=9, sh=(H-EZ_TOP)/stripes;
+  for(var i=0;i<stripes;i++){
+    ctx.fillStyle = (i%2===0)? '#1f7a3d':'#1b6e36';
+    ctx.fillRect(0, EZ_TOP+i*sh, W, sh+1);
+  }
+  // end zone band
+  ctx.fillStyle='#b3331f';
+  ctx.fillRect(0,0,W,GOAL_Y);
+  // ez hash texture
+  ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.lineWidth=2;
+  for(var x=-GOAL_Y;x<W;x+=22){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x+GOAL_Y,GOAL_Y); ctx.stroke(); }
+  // goal line
+  ctx.fillStyle='#f4f7f4'; ctx.fillRect(0,GOAL_Y-3,W,6);
+  // pylons
+  ctx.fillStyle='#ff7a18';
+  ctx.fillRect(8,GOAL_Y-12,10,18); ctx.fillRect(W-18,GOAL_Y-12,10,18);
+  // LOS line (the 1)
+  ctx.strokeStyle='rgba(244,247,244,0.85)'; ctx.lineWidth=3;
+  ctx.setLineDash([14,10]); ctx.beginPath(); ctx.moveTo(0,LOS_Y); ctx.lineTo(W,LOS_Y); ctx.stroke(); ctx.setLineDash([]);
+  // hash marks
+  ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.lineWidth=2;
+  for(var y=LOS_Y+30;y<H-10;y+=34){
+    ctx.beginPath(); ctx.moveTo(300,y); ctx.lineTo(312,y); ctx.moveTo(448,y); ctx.lineTo(460,y); ctx.stroke();
+  }
+  // END ZONE text
+  ctx.save(); ctx.translate(34,GOAL_Y/2); ctx.rotate(-Math.PI/2);
+  ctx.fillStyle='rgba(255,255,255,0.85)'; ctx.font='700 26px Oswald, sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('END ZONE',0,0); ctx.restore();
+  ctx.save(); ctx.translate(W-34,GOAL_Y/2); ctx.rotate(Math.PI/2);
+  ctx.fillStyle='rgba(255,255,255,0.85)'; ctx.font='700 26px Oswald, sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('END ZONE',0,0); ctx.restore();
+  // big yard "1"
+  ctx.fillStyle='rgba(255,255,255,0.12)'; ctx.font='900 110px Oswald, sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('1',MID_X,LOS_Y+150);
+}
+
+function drawTell(){
+  if(STATE!=='PRESNAP' && STATE!=='TIMING') return;
+  var glow=0.35+0.25*Math.sin(pulse*5);
+  ctx.save();
+  ctx.strokeStyle='rgba(255,59,59,'+glow+')';
+  ctx.fillStyle='rgba(255,59,59,0.14)';
+  ctx.lineWidth=3;
+  if(defense==='BOX'){
+    roundRect(300,128,160,82,12); ctx.fill(); ctx.stroke();
+    tag('STACKED', MID_X, 122, '#ff6b6b');
+  } else {
+    var rid = defense==='TE'?'TE':(defense==='WR_L'?'WL':'WR');
+    var o=chip(offense,rid);
+    ctx.beginPath(); ctx.arc(o.x,o.y,30,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    tag('KEYED', o.x, o.y-40, '#ff6b6b');
+  }
+  ctx.restore();
+}
+function tag(txt,x,y,col){
+  ctx.font='700 13px Oswald, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  var w=ctx.measureText(txt).width+14;
+  ctx.fillStyle='rgba(10,12,10,0.8)'; roundRect(x-w/2,y-10,w,20,6); ctx.fill();
+  ctx.fillStyle=col; ctx.fillText(txt,x,y);
+}
+
+function drawChip(c){
+  var r = c.id==='QB'?15 : (c.team==='qb'?15:14);
+  var fill = c.team==='d' ? '#d8202a' : (c.team==='qb' ? '#f2c200' : '#2f6df0');
+  // shadow
+  ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(c.x,c.y+r-2,r*0.9,r*0.45,0,0,Math.PI*2); ctx.fill();
+  // body
+  ctx.beginPath(); ctx.arc(c.x,c.y,r,0,Math.PI*2);
+  ctx.fillStyle=fill; ctx.fill();
+  ctx.lineWidth=2.5; ctx.strokeStyle = c.team==='d' ? '#7a0f15' : (c.team==='qb'?'#9c7e00':'#173b8a'); ctx.stroke();
+  // inner ring
+  ctx.beginPath(); ctx.arc(c.x,c.y,r-5,0,Math.PI*2); ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=1.5; ctx.stroke();
+  if(c.label){
+    ctx.fillStyle='#fff'; ctx.font='700 10px Oswald, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(c.label,c.x,c.y);
+  }
+}
+
+function drawPlayers(){
+  defenders.forEach(drawChip);
+  offense.forEach(drawChip);
+}
+
+function drawBall(){
+  if(STATE!=='RESOLVE' || !ballFrom) return;
+  var t=Math.min(1, animT/0.55);
+  var x=lerp(ballFrom.x,ballTo.x,t);
+  var y=lerp(ballFrom.y,ballTo.y,t) - Math.sin(t*Math.PI)*34; // arc
+  ctx.save();
+  ctx.fillStyle='#5a3210'; ctx.strokeStyle='#fff'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.ellipse(x,y,8,5,0.5,0,Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x-4,y-2); ctx.lineTo(x+4,y+2); ctx.stroke();
+  ctx.restore();
+  if(!result && t>=1){ // incomplete X
+    ctx.strokeStyle='#fff'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(ballTo.x-9,ballTo.y-9); ctx.lineTo(ballTo.x+9,ballTo.y+9);
+    ctx.moveTo(ballTo.x+9,ballTo.y-9); ctx.lineTo(ballTo.x-9,ballTo.y+9); ctx.stroke();
+  }
+}
+
+function drawTimingMeter(){
+  if(STATE!=='TIMING') return;
+  var bw=W*0.62, bh=26, bx=(W-bw)/2, by=H-58;
+  // track
+  ctx.fillStyle='rgba(8,12,16,0.9)'; roundRect(bx-4,by-4,bw+8,bh+8,8); ctx.fill();
+  // zones
+  function zone(a,b,col){ ctx.fillStyle=col; ctx.fillRect(bx+bw*a,by,bw*(b-a),bh); }
+  zone(0,0.32,'#7a1f1f'); zone(0.32,0.43,'#b08a1f'); zone(0.43,0.57,'#3fb81f');
+  zone(0.57,0.68,'#b08a1f'); zone(0.68,1,'#7a1f1f');
+  ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=1.5; ctx.strokeRect(bx,by,bw,bh);
+  // marker
+  var mx=bx+bw*timingT;
+  ctx.fillStyle='#fff'; ctx.fillRect(mx-2,by-7,4,bh+14);
+  ctx.beginPath(); ctx.moveTo(mx-7,by-7); ctx.lineTo(mx+7,by-7); ctx.lineTo(mx,by+1); ctx.fill();
+  ctx.fillStyle='#cfe'; ctx.font='700 12px Oswald, sans-serif'; ctx.textAlign='center';
+  ctx.fillText('STOP IT IN THE GREEN', W/2, by-16);
+}
+
+function drawOverlays(){
+  if(flash>0){ ctx.fillStyle='rgba(255,255,255,'+(flash*0.6)+')'; ctx.fillRect(0,0,W,H); }
+  if(STATE==='RESULT'){
+    ctx.save();
+    ctx.fillStyle='rgba(6,10,14,0.55)'; ctx.fillRect(0,H/2-70,W,140);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle = result ? '#9cff3b' : '#ff5b5b';
+    ctx.font='30px "Press Start 2P", monospace';
+    ctx.fillText(resultText, W/2, H/2-12);
+    ctx.fillStyle='#dfe9df'; ctx.font='700 18px Oswald, sans-serif';
+    ctx.fillText(resultSub + (result?'  ·  +7':''), W/2, H/2+30);
+    ctx.restore();
+  }
+  if(STATE==='GAMEOVER'){
+    ctx.save();
+    ctx.fillStyle='rgba(6,10,14,0.78)'; ctx.fillRect(0,0,W,H);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='#ffb000'; ctx.font='26px "Press Start 2P", monospace';
+    ctx.fillText('GOAL LINE', W/2, H/2-70);
+    ctx.fillText('STAND', W/2, H/2-30);
+    ctx.fillStyle='#dfe9df'; ctx.font='700 22px Oswald, sans-serif';
+    ctx.fillText('Drives in: '+series+'   ·   Points: '+score, W/2, H/2+24);
+    ctx.fillStyle='#8fb0c9'; ctx.font='700 15px Oswald, sans-serif';
+    ctx.fillText('the defense held on 4th down', W/2, H/2+56);
+    ctx.restore();
+  }
+  // confetti on top
+  confetti.forEach(function(p){
+    ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot);
+    ctx.globalAlpha=Math.max(0,Math.min(1,p.life));
+    ctx.fillStyle=p.c; ctx.fillRect(-p.s/2,-p.s/2,p.s,p.s*1.6); ctx.restore();
+  });
+  ctx.globalAlpha=1;
+}
+
+function roundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+
+// ---------- loop ----------
+var last=0;
+function frame(ts){
+  if(!last) last=ts;
+  var dt=Math.min(0.05,(ts-last)/1000); last=ts;
+
+  // updates
+  if(STATE==='TIMING'){
+    timingT += timingDir*timingSpeed*dt;
+    if(timingT>=1){ timingT=1; timingDir=-1; } else if(timingT<=0){ timingT=0; timingDir=1; }
+  } else if(STATE==='RESOLVE'){
+    tickResolve(dt);
+  } else if(STATE==='RESULT'){
+    resultTimer-=dt; if(resultTimer<=0) afterResult();
+  }
+  tickFx(dt);
+
+  // render
+  ctx.save();
+  if(shake>0){ ctx.translate((Math.random()*2-1)*shake,(Math.random()*2-1)*shake); }
+  ctx.clearRect(-20,-20,W+40,H+40);
+  drawField();
+  drawTell();
+  drawPlayers();
+  drawBall();
+  drawTimingMeter();
+  ctx.restore();
+  drawOverlays();
+
+  requestAnimationFrame(frame);
+}
+
+// ---------- input ----------
+elCalls.addEventListener('click',function(e){
+  var b=e.target.closest('.play'); if(!b) return; selectPlay(b.getAttribute('data-play'));
+});
+function tapAction(){
+  if(STATE==='TIMING') lockTiming();
+  else if(STATE==='GAMEOVER') restart();
+}
+cv.addEventListener('pointerdown',function(e){ e.preventDefault(); tapAction(); });
+elSnap.addEventListener('click',function(){ if(STATE==='TIMING') lockTiming(); });
+elReplay.addEventListener('click',restart);
+elMute.addEventListener('click',function(){ muted=!muted; elMute.textContent=muted?'SND OFF':'SND ON'; if(!muted) audio(); });
+
+window.addEventListener('keydown',function(e){
+  if(e.repeat) return;
+  if(e.code==='Space'){ e.preventDefault(); tapAction(); return; }
+  if(STATE==='PRESNAP'){
+    if(e.key==='1') selectPlay('RUN');
+    else if(e.key==='2') selectPlay('TE');
+    else if(e.key==='3') selectPlay('WR_L');
+    else if(e.key==='4') selectPlay('WR_R');
+  } else if(STATE==='GAMEOVER' && (e.key==='Enter'||e.key===' ')){ restart(); }
+});
+
+// ---------- go ----------
+newSeries();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
