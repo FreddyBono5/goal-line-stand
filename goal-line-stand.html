@@ -50,7 +50,7 @@
 
   .stage{position:relative;border-radius:12px;overflow:hidden;border:2px solid #2c3a49;
     box-shadow:0 14px 34px rgba(0,0,0,.55), inset 0 0 0 2px #000;background:#0a0f0b;}
-  canvas{display:block;width:100%;height:auto;image-rendering:auto;touch-action:manipulation;}
+  canvas{display:block;width:100%;height:auto;image-rendering:auto;touch-action:none;}
 
   .readout{display:flex;align-items:center;justify-content:center;gap:10px;min-height:30px;margin:12px 2px 4px;
     font-weight:700;letter-spacing:2px;text-transform:uppercase;font-size:14px;color:#bcd0c4}
@@ -111,11 +111,10 @@
     <button class="play wr"  data-play="WR_R"><span class="num">4</span><span class="nm">FADE · R</span><span class="ds">Back-shoulder to the right WR</span></button>
   </div>
 
-  <button id="snapHint" class="bigbtn hide">TAP / SPACE TO LOCK THE THROW</button>
   <button id="replay" class="bigbtn hide" style="background:linear-gradient(#9cff3b,#5fb81f);border-color:#caff8f;color:#0c2406;">RUN IT BACK</button>
 
-  <div id="hint" class="hint">Pick a play with the buttons or <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd>. Then hit <kbd>SPACE</kbd> at the green to nail the timing.</div>
-  <div class="credit">a tiny goal-line cabinet · read • react • time</div>
+  <div id="hint" class="hint">Pick a play with the buttons or <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd>. Then steer with <kbd>WASD</kbd>/<kbd>ARROWS</kbd> or drag on the field to juke the D and get in.</div>
+  <div class="credit">a tiny goal-line cabinet · read • react • juke</div>
 </div>
 
 <script>
@@ -134,7 +133,7 @@ var LOS_Y  = 196;     // line of scrimmage (the 1)
 var MID_X  = 380;
 
 // ---------- game state ----------
-var STATE = 'PRESNAP'; // PRESNAP, TIMING, RESOLVE, RESULT, GAMEOVER
+var STATE = 'PRESNAP'; // PRESNAP, LIVE, RESULT, GAMEOVER
 var down = 1;          // 1..4
 var score = 0;
 var series = 0;        // drives punched in
@@ -143,42 +142,48 @@ var difficulty = 0;
 var defense = 'BOX';   // BOX, TE, WR_L, WR_R  (what the D commits to)
 var chosenPlay = null; // RUN, TE, WR_L, WR_R
 
-// timing meter
-var timingT = 0, timingDir = 1, timingSpeed = 1.4, lockT = 0.5, quality = 0;
+// live run controls
+var FIELD_MINX = 46, FIELD_MAXX = W-46, RETREAT_Y = LOS_Y+110;
+var CARRY_SPEED = 175;     // px/sec
+var DEF_BASE_SPEED = 78;   // px/sec
+var carrier = null;        // chip currently under player control
+var keys = {};
+var pointerActive = false, pointerX = 0, pointerY = 0;
+var chaseTime = 0, closestCall = 999;
+var trail = [];
 
-// resolve / animation
+// resolve
 var result = false;     // true = touchdown
-var animT = 0, animDur = 1.05;
-var ballFrom = null, ballTo = null;   // for passes
 var resultText = '', resultSub = '';
 var resultTimer = 0;
 
 // fx
 var confetti = [];
+var dust = [];
 var shake = 0;
 var flash = 0;          // white flash on score
 var pulse = 0;          // ambient pulse for tells
 
 // ---------- players ----------
-function P(id,label,x,y,team){ return {id:id,label:label,x:x,y:y,bx:x,by:y,team:team}; }
+function P(id,label,x,y,team,num){ return {id:id,label:label,x:x,y:y,bx:x,by:y,team:team,num:num}; }
 var offense=[], defenders=[];
 
 function buildFormation(){
   offense = [
-    P('LT','',270,205,'o'), P('LG','',322,205,'o'), P('C','',380,205,'o'),
-    P('RG','',438,205,'o'), P('RT','',490,205,'o'),
-    P('TE','TE',548,205,'o'),
-    P('QB','QB',380,250,'qb'),
-    P('RB','RB',380,295,'o'),
-    P('WL','WR',112,210,'o'),
-    P('WR','WR',648,210,'o')
+    P('LT','',270,205,'o',73), P('LG','',322,205,'o',65), P('C','',380,205,'o',55),
+    P('RG','',438,205,'o',64), P('RT','',490,205,'o',77),
+    P('TE','TE',548,205,'o',81),
+    P('QB','QB',380,250,'qb',7),
+    P('RB','RB',380,295,'o',28),
+    P('WL','WR',112,210,'o',11),
+    P('WR','WR',648,210,'o',84)
   ];
   defenders = [
-    P('DL1','',330,168,'d'), P('DL2','',380,168,'d'), P('DL3','',430,168,'d'),
-    P('LB1','',345,140,'d'), P('LB2','',415,140,'d'),
-    P('CBL','CB',132,150,'d'), P('CBR','CB',628,150,'d'),
-    P('SE','S',548,138,'d'),
-    P('FS','S',380,72,'d')
+    P('DL1','',330,168,'d',90), P('DL2','',380,168,'d',95), P('DL3','',430,168,'d',91),
+    P('LB1','',345,140,'d',54), P('LB2','',415,140,'d',58),
+    P('CBL','CB',132,150,'d',24), P('CBR','CB',628,150,'d',21),
+    P('SE','S',548,138,'d',31),
+    P('FS','S',380,72,'d',29)
   ];
 }
 
@@ -222,13 +227,12 @@ function crowd(dur){
 function sndSnap(){ blip(180,0.07,'square',0.18); blip(140,0.09,'square',0.16,0.07); }
 function sndTD(){ blip(523,0.1,'square',0.2,0); blip(659,0.1,'square',0.2,0.1); blip(784,0.1,'square',0.2,0.2); blip(1047,0.22,'square',0.22,0.3); crowd(1.0); }
 function sndStuff(){ sweepDown(300,70,0.4); blip(90,0.18,'square',0.18,0.05); }
-function sndLock(){ blip(660,0.05,'square',0.14); }
 
 // ---------- DOM ----------
 var elDown=document.getElementById('bDown'), elBall=document.getElementById('bBall'),
     elScore=document.getElementById('bScore'), elSeries=document.getElementById('bSeries'),
     elReadout=document.getElementById('readout'), elCalls=document.getElementById('calls'),
-    elSnap=document.getElementById('snapHint'), elReplay=document.getElementById('replay'),
+    elReplay=document.getElementById('replay'),
     elMute=document.getElementById('mute'), elHint=document.getElementById('hint');
 
 var DOWN_NAMES={1:'1ST',2:'2ND',3:'3RD',4:'4TH'};
@@ -242,7 +246,6 @@ function refreshBoard(){
 function setReadout(html){ elReadout.innerHTML=html; }
 
 function showCalls(show){ elCalls.classList.toggle('hide',!show); }
-function showSnap(show,label){ elSnap.classList.toggle('hide',!show); if(label) elSnap.textContent=label; }
 function showReplay(show){ elReplay.classList.toggle('hide',!show); }
 
 // ---------- flow ----------
@@ -251,12 +254,12 @@ function newSeries(){
 }
 function startDown(){
   STATE='PRESNAP';
-  chosenPlay=null;
+  chosenPlay=null; carrier=null; trail=[]; chaseTime=0; closestCall=999;
   resetSnapPositions();
   pickDefense();
   applyTell();
   refreshBoard();
-  showCalls(true); showSnap(false); showReplay(false);
+  showCalls(true); showReplay(false);
   setReadout('<b>'+(DOWN_NAMES[down])+' &amp; GOAL</b> — read where the D is stacked, then call it.');
 }
 function pickDefense(){
@@ -284,102 +287,72 @@ function selectPlay(p){
   if(STATE!=='PRESNAP') return;
   chosenPlay=p;
   audio(); sndSnap();
-  STATE='TIMING';
-  timingT=0; timingDir=1;
-  timingSpeed = 1.35 + Math.min(difficulty,8)*0.11;
-  showCalls(false);
-  showSnap(true, p==='RUN' ? 'TAP / SPACE — HIT THE HOLE' : 'TAP / SPACE — RELEASE THE THROW');
-  setReadout('<b class="warn">SNAP!</b> stop the marker in the green.');
-}
+  var carrierId = p==='RUN' ? 'RB' : (p==='TE'?'TE':(p==='WR_L'?'WL':'WR'));
+  carrier = chip(offense,carrierId);
+  trail=[]; chaseTime=0; closestCall=999;
 
-function lockTiming(){
-  if(STATE!=='TIMING') return;
-  lockT=timingT;
-  var dist=Math.abs(lockT-0.5)/0.5;      // 0 = perfect
-  quality=Math.max(0,1-dist);
-  sndLock();
-
-  var base=baseSuccess(chosenPlay,defense);
-  base -= Math.min(difficulty*0.035,0.30);
-  base = Math.max(0.12, Math.min(0.92, base));
-  var prob = base*(0.45+0.55*quality);
-  prob = Math.max(0.05, Math.min(0.96, prob));
-  result = Math.random() < prob;
-
-  buildAnimation();
-  STATE='RESOLVE'; animT=0;
-  showSnap(false);
-}
-
-function baseSuccess(play,def){
-  if(play==='RUN') return def==='BOX' ? 0.30 : 0.82;
-  // pass to a receiver
-  if(def===play) return 0.27;       // defense keyed this receiver
-  if(def==='BOX') return 0.86;      // loaded box, secondary light
-  var b=0.66;                       // keyed a different receiver
-  if(play==='TE') b+=0.05;          // TE = safest
-  return b;
-}
-
-function timingRating(){
-  if(quality>0.85) return 'PERFECT TIMING';
-  if(quality>0.6)  return 'GOOD TIMING';
-  if(quality>0.35) return 'A STEP OFF';
-  return lockT<0.5 ? 'TOO EARLY' : 'TOO LATE';
-}
-
-function buildAnimation(){
-  var carrierId = chosenPlay==='RUN' ? 'RB' : (chosenPlay==='TE'?'TE':(chosenPlay==='WR_L'?'WL':'WR'));
-  var carrier = chip(offense,carrierId);
-  carrier.fx=carrier.x; carrier.fy=carrier.y;
-
-  if(chosenPlay==='RUN'){
-    carrier.tx=MID_X; carrier.ty = result ? 60 : 158;
-    // box defenders converge
-    var cv1=chip(defenders,'DL2'), cv2=chip(defenders,'LB1'), cv3=chip(defenders,'LB2');
-    [cv1,cv2,cv3].forEach(function(d){ d.fx=d.x; d.fy=d.y; d.tx=MID_X+(Math.random()*40-20); d.ty=result?175:150; });
-    ballFrom=null; ballTo=null;
-  } else {
-    var spot={x:Math.max(60,Math.min(700,carrier.x)), y: result?72:84};
-    carrier.tx=spot.x; carrier.ty=spot.y;
-    var qb=chip(offense,'QB');
-    ballFrom={x:qb.x,y:qb.y}; ballTo={x:spot.x,y:spot.y};
-    // covering defender contests
-    var dId = chosenPlay==='TE'?'SE':(chosenPlay==='WR_L'?'CBL':'CBR');
-    var d=chip(defenders,dId); d.fx=d.x; d.fy=d.y;
-    d.tx=spot.x+(result?34:6); d.ty=spot.y+(result?22:2);
-  }
-}
-
-function lerp(a,b,t){ return a+(b-a)*t; }
-function easeOut(t){ return 1-Math.pow(1-t,2.4); }
-
-function tickResolve(dt){
-  animT += dt/animDur;
-  var t=Math.min(1,animT), e=easeOut(t);
-  // move animated chips
-  [].concat(offense,defenders).forEach(function(c){
-    if(c.tx!=null){ c.x=lerp(c.fx,c.tx,e); c.y=lerp(c.fy,c.ty,e); }
+  // defenders that the D committed to (see applyTell) react fastest and are already in position
+  defenders.forEach(function(d){
+    var hot = (defense==='BOX')
+      ? (d.id==='DL1'||d.id==='DL2'||d.id==='DL3'||d.id==='LB1'||d.id==='LB2')
+      : d.id === (defense==='TE'?'SE':(defense==='WR_L'?'CBL':'CBR'));
+    d.spd = DEF_BASE_SPEED * (hot?1.32:0.78) * (1+difficulty*0.05) * (1+(down-1)*0.05);
   });
-  if(animT>=1){
-    enterResult();
+
+  STATE='LIVE';
+  showCalls(false);
+  setReadout('<b class="warn">GO!</b> juke the D and get in!');
+}
+
+function tickLive(dt){
+  chaseTime += dt;
+
+  var dx=0, dy=0;
+  if(pointerActive){
+    var pdx=pointerX-carrier.x, pdy=pointerY-carrier.y, pl=Math.hypot(pdx,pdy);
+    if(pl>4){ dx=pdx/pl; dy=pdy/pl; }
+  } else {
+    if(keys['ArrowLeft']||keys['a']) dx-=1;
+    if(keys['ArrowRight']||keys['d']) dx+=1;
+    if(keys['ArrowUp']||keys['w']) dy-=1;
+    if(keys['ArrowDown']||keys['s']) dy+=1;
+    if(dx||dy){ var l=Math.hypot(dx,dy); dx/=l; dy/=l; }
   }
+  carrier.x = Math.max(FIELD_MINX, Math.min(FIELD_MAXX, carrier.x + dx*CARRY_SPEED*dt));
+  carrier.y = Math.max(EZ_TOP+20, Math.min(RETREAT_Y, carrier.y + dy*CARRY_SPEED*dt));
+
+  trail.push({x:carrier.x,y:carrier.y,life:0.4});
+  for(var i=trail.length-1;i>=0;i--){ trail[i].life-=dt; if(trail[i].life<=0) trail.splice(i,1); }
+
+  // the pocket collapses the longer the play drags on
+  var ramp = 1 + Math.min(chaseTime/6,1)*0.6;
+  var nearest = 999;
+  defenders.forEach(function(d){
+    var ddx=carrier.x-d.x, ddy=carrier.y-d.y, dl=Math.hypot(ddx,ddy);
+    if(dl>1){ d.x += (ddx/dl)*d.spd*ramp*dt; d.y += (ddy/dl)*d.spd*ramp*dt; }
+    if(dl<nearest) nearest=dl;
+  });
+  if(nearest<closestCall) closestCall=nearest;
+
+  if(carrier.y <= GOAL_Y+4){ result=true; enterResult(); return; }
+  if(nearest < 22){ result=false; enterResult(); }
 }
 
 function enterResult(){
   STATE='RESULT'; resultTimer=1.25;
   if(result){
-    resultText='TOUCHDOWN!'; resultSub=timingRating();
+    resultText='TOUCHDOWN!';
+    resultSub = closestCall<26 ? 'barely made it in' : 'walked it in';
     score+=7; series+=1;
     flash=1; shake=10; spawnConfetti(); sndTD();
-    setReadout('<b>TOUCHDOWN!</b> '+resultSub.toLowerCase());
+    setReadout('<b>TOUCHDOWN!</b> '+resultSub);
   } else {
     if(chosenPlay==='RUN' && defense==='BOX') resultText='STUFFED!';
-    else if(chosenPlay===defense) resultText='BROKEN UP!';
-    else resultText='NO GOOD!';
-    resultSub=timingRating();
-    shake=8; sndStuff();
-    setReadout('<b class="warn">'+resultText+'</b> '+resultSub.toLowerCase());
+    else if(chosenPlay===defense) resultText='JUMPED THE GAP!';
+    else resultText='TACKLED!';
+    resultSub='short of the goal line';
+    shake=8; spawnDust(carrier.x,carrier.y); sndStuff();
+    setReadout('<b class="warn">'+resultText+'</b> '+resultSub);
   }
   refreshBoard();
 }
@@ -396,13 +369,13 @@ function afterResult(){
 
 function gameOver(){
   STATE='GAMEOVER';
-  showCalls(false); showSnap(false); showReplay(true);
+  showCalls(false); showReplay(true);
   setReadout('<b class="warn">GOAL LINE STAND.</b> the D held — '+series+' drive'+(series===1?'':'s')+' punched in.');
 }
 
 function restart(){
   score=0; series=0; difficulty=0; down=1;
-  confetti=[]; flash=0; shake=0;
+  confetti=[]; dust=[]; flash=0; shake=0;
   newSeries();
 }
 
@@ -416,6 +389,12 @@ function spawnConfetti(){
       s:3+Math.random()*4, life:1.4+Math.random()*0.8, rot:Math.random()*6, vr:(Math.random()*2-1)*8});
   }
 }
+function spawnDust(x,y){
+  for(var i=0;i<20;i++){
+    dust.push({x:x,y:y,vx:(Math.random()*2-1)*90,vy:-20-Math.random()*70,g:160,
+      c: Math.random()<0.5?'#c9b27a':'#8a6f4a', s:2+Math.random()*3, life:0.35+Math.random()*0.3});
+  }
+}
 function tickFx(dt){
   pulse += dt;
   if(shake>0) shake=Math.max(0,shake-dt*30);
@@ -423,6 +402,10 @@ function tickFx(dt){
   for(var i=confetti.length-1;i>=0;i--){
     var p=confetti[i]; p.life-=dt; if(p.life<=0){ confetti.splice(i,1); continue; }
     p.vy+=p.g*dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.rot+=p.vr*dt;
+  }
+  for(var j=dust.length-1;j>=0;j--){
+    var q=dust[j]; q.life-=dt; if(q.life<=0){ dust.splice(j,1); continue; }
+    q.vy+=q.g*dt; q.x+=q.vx*dt; q.y+=q.vy*dt;
   }
 }
 
@@ -466,7 +449,7 @@ function drawField(){
 }
 
 function drawTell(){
-  if(STATE!=='PRESNAP' && STATE!=='TIMING') return;
+  if(STATE!=='PRESNAP') return;
   var glow=0.35+0.25*Math.sin(pulse*5);
   ctx.save();
   ctx.strokeStyle='rgba(255,59,59,'+glow+')';
@@ -492,18 +475,43 @@ function tag(txt,x,y,col){
 
 function drawChip(c){
   var r = c.id==='QB'?15 : (c.team==='qb'?15:14);
-  var fill = c.team==='d' ? '#d8202a' : (c.team==='qb' ? '#f2c200' : '#2f6df0');
-  // shadow
-  ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(c.x,c.y+r-2,r*0.9,r*0.45,0,0,Math.PI*2); ctx.fill();
-  // body
-  ctx.beginPath(); ctx.arc(c.x,c.y,r,0,Math.PI*2);
-  ctx.fillStyle=fill; ctx.fill();
-  ctx.lineWidth=2.5; ctx.strokeStyle = c.team==='d' ? '#7a0f15' : (c.team==='qb'?'#9c7e00':'#173b8a'); ctx.stroke();
-  // inner ring
-  ctx.beginPath(); ctx.arc(c.x,c.y,r-5,0,Math.PI*2); ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=1.5; ctx.stroke();
+  var jersey = c.team==='d' ? '#d8202a' : (c.team==='qb' ? '#f2c200' : '#2f6df0');
+  var jerseyDark = c.team==='d' ? '#7a0f15' : (c.team==='qb'?'#9c7e00':'#173b8a');
+  var faceDir = c.team==='d' ? 1 : -1; // defense faces downfield(+y), offense faces the end zone(-y)
+
+  ctx.save();
+  // ground shadow
+  ctx.fillStyle='rgba(0,0,0,0.35)';
+  ctx.beginPath(); ctx.ellipse(c.x,c.y+r*0.7,r*0.95,r*0.5,0,0,Math.PI*2); ctx.fill();
+
+  // shoulder pads / torso
+  ctx.beginPath(); ctx.ellipse(c.x,c.y,r*1.05,r*0.82,0,0,Math.PI*2);
+  ctx.fillStyle=jersey; ctx.fill();
+  ctx.lineWidth=2; ctx.strokeStyle=jerseyDark; ctx.stroke();
+
+  // jersey number
+  if(c.num){
+    ctx.fillStyle='#fff'; ctx.font='700 '+Math.round(r*0.6)+'px Oswald, sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(String(c.num), c.x, c.y+1);
+  }
+
+  // helmet, offset toward the direction the player is facing
+  var hx=c.x, hy=c.y+faceDir*r*0.78, hr=r*0.62;
+  ctx.beginPath(); ctx.arc(hx,hy,hr,0,Math.PI*2);
+  ctx.fillStyle=jerseyDark; ctx.fill();
+  ctx.lineWidth=1.5; ctx.strokeStyle='rgba(0,0,0,0.4)'; ctx.stroke();
+  // facemask bar
+  ctx.strokeStyle='rgba(255,255,255,0.55)'; ctx.lineWidth=1.2;
+  ctx.beginPath(); ctx.moveTo(hx-hr*0.65,hy); ctx.lineTo(hx+hr*0.65,hy); ctx.stroke();
+  // helmet shine
+  ctx.beginPath(); ctx.arc(hx-hr*0.3,hy-hr*0.3,hr*0.3,0,Math.PI*2);
+  ctx.fillStyle='rgba(255,255,255,0.35)'; ctx.fill();
+  ctx.restore();
+
   if(c.label){
-    ctx.fillStyle='#fff'; ctx.font='700 10px Oswald, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(c.label,c.x,c.y);
+    ctx.fillStyle='#fff'; ctx.font='700 9px Oswald, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(c.label, c.x, c.y+r*1.7);
   }
 }
 
@@ -512,39 +520,25 @@ function drawPlayers(){
   offense.forEach(drawChip);
 }
 
-function drawBall(){
-  if(STATE!=='RESOLVE' || !ballFrom) return;
-  var t=Math.min(1, animT/0.55);
-  var x=lerp(ballFrom.x,ballTo.x,t);
-  var y=lerp(ballFrom.y,ballTo.y,t) - Math.sin(t*Math.PI)*34; // arc
-  ctx.save();
-  ctx.fillStyle='#5a3210'; ctx.strokeStyle='#fff'; ctx.lineWidth=1.5;
-  ctx.beginPath(); ctx.ellipse(x,y,8,5,0.5,0,Math.PI*2); ctx.fill(); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x-4,y-2); ctx.lineTo(x+4,y+2); ctx.stroke();
-  ctx.restore();
-  if(!result && t>=1){ // incomplete X
-    ctx.strokeStyle='#fff'; ctx.lineWidth=3;
-    ctx.beginPath(); ctx.moveTo(ballTo.x-9,ballTo.y-9); ctx.lineTo(ballTo.x+9,ballTo.y+9);
-    ctx.moveTo(ballTo.x+9,ballTo.y-9); ctx.lineTo(ballTo.x-9,ballTo.y+9); ctx.stroke();
+function drawTrail(){
+  if(!trail.length) return;
+  var col = carrier && carrier.team==='qb' ? '#f2c200' : '#2f6df0';
+  for(var i=0;i<trail.length;i++){
+    var p=trail[i];
+    ctx.globalAlpha = Math.max(0,p.life/0.4)*0.3;
+    ctx.fillStyle=col;
+    ctx.beginPath(); ctx.arc(p.x,p.y,7,0,Math.PI*2); ctx.fill();
   }
+  ctx.globalAlpha=1;
 }
 
-function drawTimingMeter(){
-  if(STATE!=='TIMING') return;
-  var bw=W*0.62, bh=26, bx=(W-bw)/2, by=H-58;
-  // track
-  ctx.fillStyle='rgba(8,12,16,0.9)'; roundRect(bx-4,by-4,bw+8,bh+8,8); ctx.fill();
-  // zones
-  function zone(a,b,col){ ctx.fillStyle=col; ctx.fillRect(bx+bw*a,by,bw*(b-a),bh); }
-  zone(0,0.32,'#7a1f1f'); zone(0.32,0.43,'#b08a1f'); zone(0.43,0.57,'#3fb81f');
-  zone(0.57,0.68,'#b08a1f'); zone(0.68,1,'#7a1f1f');
-  ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=1.5; ctx.strokeRect(bx,by,bw,bh);
-  // marker
-  var mx=bx+bw*timingT;
-  ctx.fillStyle='#fff'; ctx.fillRect(mx-2,by-7,4,bh+14);
-  ctx.beginPath(); ctx.moveTo(mx-7,by-7); ctx.lineTo(mx+7,by-7); ctx.lineTo(mx,by+1); ctx.fill();
-  ctx.fillStyle='#cfe'; ctx.font='700 12px Oswald, sans-serif'; ctx.textAlign='center';
-  ctx.fillText('STOP IT IN THE GREEN', W/2, by-16);
+function drawBall(){
+  if(!carrier || STATE==='PRESNAP' || STATE==='GAMEOVER') return;
+  var bx=carrier.x+9, by=carrier.y+7;
+  ctx.save();
+  ctx.fillStyle='#5a3210'; ctx.strokeStyle='#fff'; ctx.lineWidth=1.3;
+  ctx.beginPath(); ctx.ellipse(bx,by,6.5,4,0.5,0,Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.restore();
 }
 
 function drawOverlays(){
@@ -579,6 +573,10 @@ function drawOverlays(){
     ctx.globalAlpha=Math.max(0,Math.min(1,p.life));
     ctx.fillStyle=p.c; ctx.fillRect(-p.s/2,-p.s/2,p.s,p.s*1.6); ctx.restore();
   });
+  dust.forEach(function(p){
+    ctx.globalAlpha=Math.max(0,Math.min(1,p.life/0.6));
+    ctx.fillStyle=p.c; ctx.fillRect(p.x-p.s/2,p.y-p.s/2,p.s,p.s);
+  });
   ctx.globalAlpha=1;
 }
 
@@ -595,11 +593,8 @@ function frame(ts){
   var dt=Math.min(0.05,(ts-last)/1000); last=ts;
 
   // updates
-  if(STATE==='TIMING'){
-    timingT += timingDir*timingSpeed*dt;
-    if(timingT>=1){ timingT=1; timingDir=-1; } else if(timingT<=0){ timingT=0; timingDir=1; }
-  } else if(STATE==='RESOLVE'){
-    tickResolve(dt);
+  if(STATE==='LIVE'){
+    tickLive(dt);
   } else if(STATE==='RESULT'){
     resultTimer-=dt; if(resultTimer<=0) afterResult();
   }
@@ -611,9 +606,9 @@ function frame(ts){
   ctx.clearRect(-20,-20,W+40,H+40);
   drawField();
   drawTell();
+  drawTrail();
   drawPlayers();
   drawBall();
-  drawTimingMeter();
   ctx.restore();
   drawOverlays();
 
@@ -624,18 +619,26 @@ function frame(ts){
 elCalls.addEventListener('click',function(e){
   var b=e.target.closest('.play'); if(!b) return; selectPlay(b.getAttribute('data-play'));
 });
-function tapAction(){
-  if(STATE==='TIMING') lockTiming();
-  else if(STATE==='GAMEOVER') restart();
+function updatePointerPos(e){
+  var rect=cv.getBoundingClientRect();
+  pointerX=(e.clientX-rect.left)*(W/rect.width);
+  pointerY=(e.clientY-rect.top)*(H/rect.height);
 }
-cv.addEventListener('pointerdown',function(e){ e.preventDefault(); tapAction(); });
-elSnap.addEventListener('click',function(){ if(STATE==='TIMING') lockTiming(); });
+cv.addEventListener('pointerdown',function(e){
+  e.preventDefault();
+  if(STATE==='GAMEOVER'){ restart(); return; }
+  if(STATE==='LIVE'){ pointerActive=true; updatePointerPos(e); }
+});
+cv.addEventListener('pointermove',function(e){ if(pointerActive){ e.preventDefault(); updatePointerPos(e); } });
+window.addEventListener('pointerup',function(){ pointerActive=false; });
 elReplay.addEventListener('click',restart);
 elMute.addEventListener('click',function(){ muted=!muted; elMute.textContent=muted?'SND OFF':'SND ON'; if(!muted) audio(); });
 
+var MOVE_KEYS={ArrowLeft:1,ArrowRight:1,ArrowUp:1,ArrowDown:1,a:1,d:1,w:1,s:1};
 window.addEventListener('keydown',function(e){
+  if(MOVE_KEYS[e.key]) e.preventDefault();
+  keys[e.key]=true;
   if(e.repeat) return;
-  if(e.code==='Space'){ e.preventDefault(); tapAction(); return; }
   if(STATE==='PRESNAP'){
     if(e.key==='1') selectPlay('RUN');
     else if(e.key==='2') selectPlay('TE');
@@ -643,6 +646,7 @@ window.addEventListener('keydown',function(e){
     else if(e.key==='4') selectPlay('WR_R');
   } else if(STATE==='GAMEOVER' && (e.key==='Enter'||e.key===' ')){ restart(); }
 });
+window.addEventListener('keyup',function(e){ keys[e.key]=false; });
 
 // ---------- go ----------
 newSeries();
